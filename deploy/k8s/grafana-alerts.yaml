@@ -1,0 +1,18 @@
+# Loki alerting rules: page on page-worthy NIGHTWATCH priorities, route the rest
+# to a notice feed. Falco → Loki via falcosidekick.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: nightwatch-loki-rules, namespace: monitoring }
+data:
+  rules.yaml: |
+    groups:
+      - name: nightwatch
+        rules:
+          - alert: NightwatchCritical
+            expr: 'sum by (rule, k8s_pod_name) (count_over_time({app="falco"} | json | priority="Critical" [5m])) > 0'
+            labels: { severity: page }
+            annotations: { summary: "CRITICAL runtime detection: {{ $labels.rule }} on {{ $labels.k8s_pod_name }}" }
+          - alert: NightwatchWarningBurst
+            expr: 'sum by (k8s_pod_name) (count_over_time({app="falco"} | json | priority="Warning" [5m])) > 3'
+            labels: { severity: page }
+            annotations: { summary: "Warning burst on {{ $labels.k8s_pod_name }} — likely active intrusion chain" }

@@ -1,0 +1,29 @@
+{
+  "name": "nightwatch",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "NIGHTWATCH: Kubernetes runtime threat detection engineering",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test 'test/*.test.ts'",
+    "report": "node core/report.ts"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21"
+  }
+}

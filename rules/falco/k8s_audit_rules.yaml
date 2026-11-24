@@ -1,0 +1,26 @@
+# NIGHTWATCH Kubernetes audit rules (apiserver audit webhook → Falco k8saudit plugin).
+# Covers NW-005/012/013/015: SA-token API recon, exec, secret enumeration.
+
+- rule: Pod Exec by Service Account
+  desc: pods/exec authenticated as a service account rather than a human — stolen-token hands-on-keyboard.
+  condition: ka.verb in (create) and ka.target.resource=pods and ka.target.subresource=exec and ka.user.name startswith "system:serviceaccount:"
+  output: "Pod exec by service account (user=%ka.user.name pod=%ka.target.name ns=%ka.target.namespace)"
+  priority: WARNING
+  source: k8s_audit
+  tags: [k8s, mitre, T1078, T1021, lateral]
+
+- rule: Secret Enumerated by Service Account
+  desc: A service account listing/reading secrets — over-permissioned SA abuse after token theft.
+  condition: ka.verb in (list, get) and ka.target.resource=secrets and ka.user.name startswith "system:serviceaccount:"
+  output: "Secrets accessed by service account (user=%ka.user.name ns=%ka.target.namespace verb=%ka.verb)"
+  priority: WARNING
+  source: k8s_audit
+  tags: [k8s, mitre, T1552.007, T1078, credentials]
+
+- rule: Interactive Exec into Pod
+  desc: Any pods/exec — baseline against the on-call roster.
+  condition: ka.verb in (create) and ka.target.resource=pods and ka.target.subresource=exec
+  output: "Exec into pod (user=%ka.user.name pod=%ka.target.name ns=%ka.target.namespace)"
+  priority: NOTICE
+  source: k8s_audit
+  tags: [k8s, mitre, T1059, T1021, audit]

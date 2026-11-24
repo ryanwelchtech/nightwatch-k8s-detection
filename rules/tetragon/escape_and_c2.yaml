@@ -1,0 +1,33 @@
+# NIGHTWATCH Tetragon TracingPolicy — kernel-level enforcement/observation for
+# the highest-severity techniques. Tetragon can SIGKILL on match (enforcement),
+# shown here for the namespace-escape path.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: nightwatch-escape-and-c2
+spec:
+  kprobes:
+    - call: "sys_setns"          # NW-002 Escape to Host (T1611)
+      syscall: true
+      args:
+        - index: 0
+          type: "int"
+        - index: 1
+          type: "int"
+      selectors:
+        - matchActions:
+            - action: Sigkill     # enforce: kill the escaping process
+    - call: "security_file_open"  # NW-004/011 sensitive reads
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/run/secrets/kubernetes.io/serviceaccount"
+                - "/var/run/docker.sock"
+          matchActions:
+            - action: Post

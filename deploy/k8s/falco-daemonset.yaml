@@ -1,0 +1,42 @@
+# Falco as a DaemonSet with the NIGHTWATCH rules mounted. One sensor per node;
+# the modern eBPF probe needs no kernel module. k8s-audit rules load via the
+# apiserver audit webhook (not shown: audit-policy + webhook config).
+apiVersion: v1
+kind: Namespace
+metadata: { name: falco, labels: { pod-security.kubernetes.io/enforce: privileged } }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: nightwatch-rules, namespace: falco }
+data:
+  nightwatch_rules.yaml: |
+    # (synced from rules/falco/nightwatch_rules.yaml by CI)
+  k8s_audit_rules.yaml: |
+    # (synced from rules/falco/k8s_audit_rules.yaml by CI)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: { name: falco, namespace: falco }
+spec:
+  selector: { matchLabels: { app: falco } }
+  template:
+    metadata: { labels: { app: falco } }
+    spec:
+      serviceAccountName: falco
+      hostPID: true           # required to see every container's process tree
+      containers:
+        - name: falco
+          image: falcosecurity/falco-no-driver:0.38.2
+          args: ["/usr/bin/falco", "--modern-bpf", "-r", "/etc/falco/rules.d"]
+          securityContext: { privileged: true }   # eBPF probe load
+          resources: { requests: { cpu: 100m, memory: 512Mi }, limits: { cpu: "1", memory: 1Gi } }
+          volumeMounts:
+            - { name: rules, mountPath: /etc/falco/rules.d, readOnly: true }
+            - { name: boot, mountPath: /host/boot, readOnly: true }
+            - { name: modules, mountPath: /host/lib/modules, readOnly: true }
+            - { name: proc, mountPath: /host/proc, readOnly: true }
+      volumes:
+        - { name: rules, configMap: { name: nightwatch-rules } }
+        - { name: boot, hostPath: { path: /boot } }
+        - { name: modules, hostPath: { path: /lib/modules } }
+        - { name: proc, hostPath: { path: /proc } }

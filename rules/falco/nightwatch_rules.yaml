@@ -1,0 +1,94 @@
+# NIGHTWATCH Falco ruleset — the in-cluster analogue of core/rules.ts.
+# Load alongside the Falco defaults:  falco -r /etc/falco/nightwatch_rules.yaml
+# Every rule carries its MITRE ATT&CK technique as a tag so alerts map straight
+# onto the ATT&CK for Containers matrix in Grafana/Loki.
+
+- required_engine_version: 0.37.0
+
+- macro: container
+  condition: (container.id != host)
+
+- macro: spawned_process
+  condition: (evt.type in (execve, execveat) and evt.dir=<)
+
+- list: shell_binaries
+  items: [bash, sh, zsh, ash, dash, ksh]
+
+- list: mining_binaries
+  items: [xmrig, minerd, cpuminer, kdevtmpfsi]
+
+- list: sa_token_readers
+  items: [sh, bash, zsh, ash, dash, curl, wget, python, python3, perl, ruby, nc, ncat, socat, cat, xxd]
+
+# NW-001
+- rule: Shell Spawned in Container
+  desc: An interactive shell was spawned in a container (rare for immutable workloads).
+  condition: >
+    spawned_process and container and proc.name in (shell_binaries)
+    and not proc.pname in (containerd-shim, runc, docker-init, tini)
+  output: "Shell spawned in container (pod=%k8s.pod.name ns=%k8s.ns.name proc=%proc.name parent=%proc.pname image=%container.image.repository)"
+  priority: NOTICE
+  tags: [container, mitre, T1059, shell]
+
+# NW-002
+- rule: Container Escape via Namespace Break-out
+  desc: nsenter/unshare executed in a container — a direct host namespace escape attempt.
+  condition: spawned_process and container and proc.name in (nsenter, unshare)
+  output: "Namespace escape attempt in container (pod=%k8s.pod.name ns=%k8s.ns.name proc=%proc.name args=%proc.cmdline image=%container.image.repository)"
+  priority: CRITICAL
+  tags: [container, mitre, T1611, escape]
+
+# NW-003
+- rule: Privileged Container Started
+  desc: A privileged or hostPID container was started.
+  condition: spawned_process and container and (container.privileged=true)
+  output: "Privileged container running (pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository)"
+  priority: WARNING
+  tags: [container, mitre, T1610, T1548, posture]
+
+# NW-004
+- rule: SA Token Read by Shell or Transfer Tool
+  desc: A shell/interpreter/download tool read the service-account token (SDKs are excluded by process list).
+  condition: >
+    open_read and container
+    and fd.name startswith /run/secrets/kubernetes.io/serviceaccount
+    and proc.name in (sa_token_readers)
+  output: "SA token read by %proc.name (pod=%k8s.pod.name ns=%k8s.ns.name fd=%fd.name)"
+  priority: WARNING
+  tags: [container, mitre, T1552.007, credentials]
+
+# NW-006
+- rule: Crypto Miner Executed
+  desc: A known crypto-miner binary executed, or a stratum pool connection string was seen.
+  condition: spawned_process and container and (proc.name in (mining_binaries) or proc.cmdline contains "stratum+tcp")
+  output: "Crypto miner executed (pod=%k8s.pod.name ns=%k8s.ns.name proc=%proc.name args=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [container, mitre, T1496, impact]
+
+# NW-010
+- rule: Reverse Shell Pattern
+  desc: A shell redirected to a TCP socket (/dev/tcp, nc -e, socket reuse).
+  condition: >
+    spawned_process and container
+    and (proc.cmdline contains "/dev/tcp/" or (proc.name=nc and proc.cmdline contains " -e "))
+  output: "Reverse shell pattern (pod=%k8s.pod.name ns=%k8s.ns.name proc=%proc.name args=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [container, mitre, T1059, T1071, c2]
+
+# NW-011
+- rule: Sensitive Host Path Read
+  desc: A read of a dangerous host-mounted path (docker.sock, host shadow, host proc).
+  condition: >
+    open_read and container
+    and fd.name in (/var/run/docker.sock, /host/etc/shadow, /host/proc/1/environ, /host/root/.ssh/id_rsa)
+  output: "Sensitive host path read (pod=%k8s.pod.name ns=%k8s.ns.name fd=%fd.name proc=%proc.name)"
+  priority: WARNING
+  tags: [container, mitre, T1611, T1613, escape]
+
+# NW-014
+- rule: Cron Persistence Write in Container
+  desc: A write into a cron directory inside a container.
+  condition: open_write and container and (fd.name startswith /etc/cron or fd.name startswith /var/spool/cron)
+  output: "Cron persistence write (pod=%k8s.pod.name ns=%k8s.ns.name fd=%fd.name proc=%proc.name)"
+  priority: WARNING
+  tags: [container, mitre, T1053, persistence]
