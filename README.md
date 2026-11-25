@@ -15,7 +15,7 @@ stays quiet on real workloads. NIGHTWATCH makes that evidence runnable.
 
 ![NIGHTWATCH demo](docs/demo.gif)
 
-**Live demo:** https://nightwatch-detections.vercel.app · streams each attack
+**Live demo:** https://nightwatch-sandy.vercel.app · streams each attack
 through the engine, lights up the ATT&CK matrix, and shows the coverage scorecard.
 
 ---
